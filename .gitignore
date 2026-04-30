@@ -67,3 +67,31 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# === CUSTOM AQUA CULTURE ADDITIONS ===
+
+# --- Firmware (Arduino/PlatformIO) ---
+.pio/
+.vscode/
+*.bin
+*.elf
+*.map
+*.hex
+
+# --- Machine Learning (Python) ---
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+.ipynb_checkpoints/
+# Abaikan dataset besar (opsional, sesuaikan nama folder)
+/data/*.csv
+/data/*.json
+
+# --- Hardware (PCB Design) ---
+# Mengabaikan file backup dan log dari EasyEDA/KiCad
+*.bak
+*.lck
+*.s~
+*-backups/
