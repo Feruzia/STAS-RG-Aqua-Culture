@@ -15,6 +15,8 @@
 // ==========================================
 const char* ssid = "inode-A002";
 const char* password = "stasrg2024";
+// const char* ssid = "hotspott";
+// const char* password = "password";
 const char* serverName = "https://dev-aquaculture.stas-rg.com/api/sensor-data";
 const char* device_code = "DEV-9TQZXJVL";
 
@@ -48,12 +50,13 @@ const float phSlope = (abs(neutralVoltage - acidVoltage) / 3.0 + abs(neutralVolt
 
 // --- Turbidity ---
 const float TURB_CLEAR_V_REF = 4.336;
-const float TURB_REAL_V = 4.330;
+const float TURB_REAL_V = 3.90;
+const float TURB_SENSITIVITY = 25.0;
 
 // --- DO, EC, ORP ---
 const float CAL1_V_DO = 1.000;
 const float K_VALUE_EC = 1.00;
-const float ORP_OFFSET = 1.700;  // Offset yang sudah disesuaikan
+const float ORP_OFFSET = 1.493;  // Offset yang sudah disesuaikan
 
 // ==========================================
 // 4. VARIABEL GLOBAL (VALUE & VOLT)
@@ -211,19 +214,28 @@ void readSuhu() {
 
 // [2] SENSOR TURBIDITY (ADS_A Pin A0)
 void readTurbidity() {
-  adsA.setGain(0);  // FIX: 0 = Gain +/- 6.144V
+  adsA.setGain(0); // Gain 0: +/- 6.144V
   delay(10);
   long sum = 0;
-  for (int i = 0; i < 30; i++) {
-    sum += adsA.readADC(0);
-    delay(5);
-  }
+  for(int i = 0; i < 30; i++) { sum += adsA.readADC(0); delay(5); }
   turbVolt = (sum / 30.0) * 0.0001875;
-
+  
   float vCalc = turbVolt + (TURB_CLEAR_V_REF - TURB_REAL_V);
-  if (vCalc >= 4.30) ntuVal = 0.0;
-  else if (turbVolt >= 3.65 && turbVolt <= 3.75) ntuVal = 0.0;  // Pagar Udara
-  else ntuVal = -100.0 * vCalc + 433.0;                         // Rumus Ultra-Calm
+  
+  // Pagar untuk pembacaan air sangat bersih
+  if (vCalc >= 4.30) {
+    ntuVal = 0.0;
+  } 
+  // Pagar saat sensor diangkat ke udara (biasanya voltase drop ke 3.2V - 3.4V)
+  else if (turbVolt >= 3.20 && turbVolt <= 3.40) { 
+    ntuVal = 0.0; 
+  } 
+  // RUMUS BARU: Sensitivitas bisa diatur
+  else {
+    ntuVal = (TURB_CLEAR_V_REF - vCalc) * TURB_SENSITIVITY; 
+  }
+  
+  // Pastikan tidak ada nilai NTU yang minus
   if (ntuVal < 0) ntuVal = 0;
 }
 
@@ -297,22 +309,16 @@ void readORP() {
 
   // FIXED: Rumus dibalik karena modul pH bersifat Inverting untuk ORP
   // (ORP_OFFSET - orpVolt) membuat nilai naik saat tegangan turun
-  orpVal = (ORP_OFFSET - orpVolt) * 1000.0;
+  orpVal = (orpVolt - ORP_OFFSET) * 1000.0;
 }
 
 // ================================================================
 // 9. SERIAL MONITORING (ONE FUNCTION)
 // ================================================================
 void serialMonitoring() {
-  Serial.println("\n--- DATA SENSOR ---");
-  Serial.printf("SUHU: %.1f C\n", suhuC);
-  Serial.printf("pH  : %.2f (%.3f V)\n", phVal, phVolt);
-  Serial.printf("DO  : %.2f mg/L (%.3f V)\n", doVal, doVolt);
-  Serial.printf("NTU : %.1f (%.3f V)\n", ntuVal, turbVolt);
-  Serial.printf("EC  : %.0f uS/cm (%.3f V)\n", ecVal, ecVolt);
-  Serial.printf("TDSe: %.0f ppm (EC Modul)\n", tdsEC);
-  Serial.printf("TDSs: %.0f ppm (%.3f V) (Standalone)\n", tdsStdVal, tdsStdVolt);
-  Serial.printf("ORP : %.0f mV (%.3f V)\n", orpVal, orpVolt);
+  // Menampilkan semua parameter dalam satu baris, ditambah voltase khusus Turbidity
+  Serial.printf("Suhu:%.1f | pH:%.2f | DO:%.2f | Turb:%.1f(%.2fV) | EC:%.0f | TDSe:%.0f | TDSs:%.0f | ORP:%.0f\n", 
+                suhuC, phVal, doVal, ntuVal, turbVolt, ecVal, tdsEC, tdsStdVal, orpVal); 
 }
 
 // ================================================================
