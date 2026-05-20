@@ -5,10 +5,10 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
-#include "ADS1X15.h"
+#include <ADS1X15.h>
 #include <SPI.h>
 #include <SD.h>
-#include "RTClib.h"
+#include <RTClib.h>
 
 // ==========================================
 // 1. KONFIGURASI WIFI & SERVER
@@ -38,7 +38,7 @@ ADS1115 adsA(0x48);  // A0: Turb, A1: TDS Standalone, A2: pH
 ADS1115 adsB(0x49);  // A0: DO, A1: EC (inc TDSe), A2: ORP
 OneWire oneWire(SUHU_PIN);
 DallasTemperature sensors(&oneWire);
-//------------------------------
+
 // ==========================================
 // 3. DATA KALIBRASI (REFERENSI MASTER TERAKHIR)
 // ==========================================
@@ -50,14 +50,13 @@ const float phSlope = (abs(neutralVoltage - acidVoltage) / 3.0 + abs(neutralVolt
 
 // --- Turbidity ---
 const float TURB_CLEAR_V_REF = 4.336;
-const float TURB_REAL_V = 3.80; 
+const float TURB_REAL_V = 3.90;
 const float TURB_SENSITIVITY = 18.0;
 
 // --- DO, EC, ORP ---
 const float CAL1_V_DO = 1.000;
 const float K_VALUE_EC = 4.64;
-const float ORP_OFFSET = 1.4;  // Offset yang sudah disesuaikan
-bool sdStatus = false; // Variabel untuk menyimpan status SD Card
+const float ORP_OFFSET = 1.493;  // Offset yang sudah disesuaikan
 
 // ==========================================
 // 4. VARIABEL GLOBAL (VALUE & VOLT)
@@ -173,25 +172,21 @@ void setup() {
   }
 
   // 6. Inisialisasi SD Card & File Dataset
-  SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS); 
+  SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS); // Remapping SPI untuk Heltec V3
   if (!SD.begin(SD_CS)) {
     Serial.println("[ERROR] SD Card Tidak Terdeteksi!");
     lcd.setCursor(0, 1); 
     lcd.print("SD Card Error!  ");
-    sdStatus = false; // <--- TAMBAHKAN INI JIKA GAGAL
   } else {
     Serial.println("[OK] SD Card Siap.");
-    sdStatus = true; // <--- TAMBAHKAN INI JIKA BERHASIL
-    // CEK FILE: Jika BELUM ada, buat baru + Header. Jika SUDAH ada, biarkan saja.
-    if (!SD.exists("/lastest_dataset.csv")) {
-      File dataFile = SD.open("/lastest_dataset.csv", FILE_WRITE); 
+    // Buat file dataset baru jika belum ada
+    if (!SD.exists("/baseline_dataset.csv")) {
+      File dataFile = SD.open("/baseline_dataset.csv", FILE_WRITE);
       if (dataFile) {
         dataFile.println("Tanggal,Waktu,Tipe,Suhu_C,pH,DO_mgL,Turb_NTU,EC_uS,TDSe_ppm,TDSs_ppm,ORP_mV");
         dataFile.close();
-        Serial.println("[OK] File baru dibuat dengan header.");
+        Serial.println("[OK] File baseline_dataset.csv dibuat.");
       }
-    } else {
-      Serial.println("[OK] File sudah ada, data akan diteruskan.");
     }
   }
 
@@ -201,7 +196,7 @@ void setup() {
   lcd.print("Connecting WiFi.");
 
   // 7. Jalankan Koneksi WiFi
-  //connectWiFi();
+  connectWiFi();
 
   delay(1500);
   lcd.clear();
@@ -220,7 +215,7 @@ void readSuhu() {
 
 // [2] SENSOR TURBIDITY (ADS_A Pin A0)
 void readTurbidity() {
-  adsA.setGain(0); 
+  adsA.setGain(0); // Gain 0: +/- 6.144V
   delay(10);
   long sum = 0;
   for(int i = 0; i < 30; i++) { sum += adsA.readADC(0); delay(5); }
@@ -228,18 +223,20 @@ void readTurbidity() {
   
   float vCalc = turbVolt + (TURB_CLEAR_V_REF - TURB_REAL_V);
   
-  // PAGAR DIPERLEBAR: Dari 4.30 diturunkan ke 4.20
-  // Agar sedikit debu/keruh halus tidak langsung dihitung tinggi
-  if (vCalc >= 4.20) {
+  // Pagar untuk pembacaan air sangat bersih
+  if (vCalc >= 4.30) {
     ntuVal = 0.0;
   } 
+  // Pagar saat sensor diangkat ke udara (biasanya voltase drop ke 3.2V - 3.4V)
   else if (turbVolt >= 3.20 && turbVolt <= 3.40) { 
     ntuVal = 0.0; 
   } 
+  // RUMUS BARU: Sensitivitas bisa diatur
   else {
     ntuVal = (TURB_CLEAR_V_REF - vCalc) * TURB_SENSITIVITY; 
   }
   
+  // Pastikan tidak ada nilai NTU yang minus
   if (ntuVal < 0) ntuVal = 0;
 }
 
@@ -382,13 +379,12 @@ void updateLCD() {
       page = 4;
       break;
 
-case 4:  // Page 5: Status WiFi & SD Card
+    case 4:  // Page 5: Status WiFi
       lcd.print("WiFi: ");
       lcd.print(WiFi.status() == WL_CONNECTED ? "ON" : "OFF");
       lcd.setCursor(0, 1);
-      lcd.print("SD Card: ");
-      lcd.print(sdStatus ? "OK" : "ERR"); // <--- Manggil variabel di sini
-      page = 0; 
+      lcd.print("STAS-RG SENDING");
+      page = 0;
       break;
   }
 }
@@ -407,18 +403,21 @@ void sendToLaravel() {
     http.addHeader("User-Agent", "ESP32-STAS-RG");
 
     String payload = "{\"device_code\":\"" + String(device_code) + "\",";
-    payload += "\"suhuDHT\":0.00,";
-    payload += "\"suhu\":" + String(suhuC, 2) + ",";
+    payload += "\"env_temperature\":0.00,";
+    payload += "\"water_temperature\":" + String(suhuC, 2) + ",";
     payload += "\"ph\":" + String(phVal, 2) + ",";
-    payload += "\"do\":" + String(doVal, 2) + ",";
+    payload += "\"dissolved_oxygen\":" + String(doVal, 2) + ",";
     payload += "\"turbidity_ntu\":" + String(ntuVal, 2) + ",";
     payload += "\"ec_s_m\":" + String(ecVal, 0) + ",";
 
-    // SEKARANG: Mengirim TDS dari modul Standalone ke Laravel
+    // TDS dari modul Standalone
     payload += "\"tds_ppm\":" + String(tdsStdVal, 0) + ",";
 
+    // TDS hasil perhitungan dari modul EC
+    payload += "\"tds_ec_mod\":" + String(tdsEC, 0) + ",";
+
     payload += "\"orp_mv\":" + String(orpVal, 2) + ",";
-    payload += "\"risiko\":0.00}";
+    payload += "\"risk_level\":0.00}";
 
     int httpResponseCode = http.POST(payload);
 
@@ -436,7 +435,7 @@ void sendToLaravel() {
 // ================================================================
 void logToSD_Full() {
   // PASTIKAN NAMA FILE SAMA DENGAN DI VOID SETUP!
-  File dataFile = SD.open("/dataset_toksisitas.csv", FILE_APPEND);
+  File dataFile = SD.open("/baseline_dataset.csv", FILE_APPEND);
 
   if (dataFile) {
     DateTime now = rtc.now();
@@ -475,9 +474,9 @@ void logToSD_Full() {
     dataFile.println(orpVolt, 3);                       // Voltase ORP (Diakhiri println)
 
     dataFile.close();
-    Serial.println("[SD CARD] 2 Baris (Value & Volt) berhasil masuk ke dataset_toksisitas.csv!");
+    Serial.println("[SD CARD] 2 Baris (Value & Volt) berhasil masuk ke baseline_dataset.csv!");
   } else {
-    Serial.println("[SD CARD] Error: Gagal membuka dataset_toksisitas.csv");
+    Serial.println("[SD CARD] Error: Gagal membuka baseline_dataset.csv");
   }
 }
 
@@ -505,27 +504,24 @@ void loop() {
     digitalWrite(LED_PIN, !digitalRead(LED_PIN));  // Indikator kedip
   }
 
-  // // 3. Kirim ke Web Laravel (Tiap 15 Detik)
-  // if (millis() - lastWebSend >= 15000) {
-  //   // Cek koneksi WiFi sebelum maksa ngirim data
-  //   if (WiFi.status() == WL_CONNECTED) {
-  //     sendToLaravel();
-  //   } else {
-  //     Serial.println("[WIFI] Koneksi terputus! Mencoba nyambung ulang...");
-  //     WiFi.reconnect(); // Auto reconnect tanpa bikin sistem macet
-  //     lcd.setCursor(15, 0); // Opsional: Kasih tanda 'X' di pojok LCD kalau WiFi putus
-  //     lcd.print("X");
-  //   }
-  //   lastWebSend = millis();
-  // }
+  // 3. Kirim ke Web Laravel (Tiap 15 Detik)
+  if (millis() - lastWebSend >= 15000) {
+    // Cek koneksi WiFi sebelum maksa ngirim data
+    if (WiFi.status() == WL_CONNECTED) {
+      sendToLaravel();
+    } else {
+      Serial.println("[WIFI] Koneksi terputus! Mencoba nyambung ulang...");
+      WiFi.reconnect(); // Auto reconnect tanpa bikin sistem macet
+      lcd.setCursor(15, 0); // Opsional: Kasih tanda 'X' di pojok LCD kalau WiFi putus
+      lcd.print("X");
+    }
+    lastWebSend = millis();
+  }
 
   // 4. Log ke SD Card (Tiap 60 Detik / 1 Menit)
-// Log ke SD Card setiap 15 detik
 unsigned long currentMillis = millis();
   if (currentMillis - lastLogTime >= logInterval) {
     lastLogTime = currentMillis;
     logToSD_Full();
   }
-
-
 }
