@@ -1,0 +1,97 @@
+(footprint "Rocker_Switch"
+	(version 20241229)
+	(generator "pcbnew")
+	(generator_version "9.0")
+	(layer "F.Cu")
+	(property "Reference" "REF**"
+		(at 0 6.6 0)
+		(unlocked yes)
+		(layer "F.SilkS")
+		(uuid "be009595-a6c7-4101-9822-e8864378be73")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+		)
+	)
+	(property "Value" "Rocker_Switch"
+		(at -0.1 -8.3 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(uuid "cfb2231d-026f-4105-802c-d1fa022efb5e")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "45f49290-2649-443b-871e-da212d1faf5e")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "335a3595-73e3-4fec-a254-6aceab81bdb5")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr smd)
+	(fp_rect
+		(start -7 -5.5)
+		(end 8 5.5)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(fill no)
+		(layer "F.SilkS")
+		(uuid "1f88b217-88bc-4b08-b5a5-0e44b76cc7ec")
+	)
+	(fp_text user "${REFERENCE}"
+		(at -0.1 -6.8 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(uuid "d08d9089-fbfb-46f8-b515-69fd8b630ec1")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(pad "1" thru_hole rect
+		(at -5 0)
+		(size 3.6 5.3)
+		(drill oval 1.8 4.2)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "d54f7086-16dc-445a-98c5-88e74bebeea3")
+	)
+	(pad "2" thru_hole rect
+		(at 0.5 0)
+		(size 3.6 5.3)
+		(drill oval 1.8 4.2)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "8f9a6881-2436-460c-9efb-cc76f10ae31e")
+	)
+	(embedded_fonts no)
+)
